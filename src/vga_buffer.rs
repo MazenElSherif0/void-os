@@ -23,11 +23,15 @@ pub enum Color {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-struct ColorCode(u8);
+pub struct ColorCode(u8);
 
 impl ColorCode {
-    fn new(foreground: Color, background: Color) -> ColorCode {
+    pub fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
+    }
+
+    pub fn change_color(&mut self, fore: Color, back: Color) {
+        *self = ColorCode((back as u8) << 4 | (fore as u8))
     }
 }
 
@@ -96,6 +100,11 @@ impl Writer {
         self.column_position = 0;
     }
 
+    pub fn change_color(&mut self, color: Color, back: Color) -> fmt::Result {
+        self.color_code.change_color(color, back);
+        Ok(())
+    }
+
     fn clear_row(&mut self, row: usize) {
         let blank = ScreenChar {
             ascii_character: b' ',
@@ -129,8 +138,57 @@ pub fn print_test() {
     write!(writer, "The numbers are {} and {}", 42, 1.0 / 3.0).unwrap();
 }
 
-pub static WRITER: Writer = Writer {
-    column_position: 0,
-    color_code: ColorCode::new(Color::Yellow, Color::Black),
-    buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
-};
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => (&crate::vga_buffer::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! errorln {
+    ($($arg:tt)*) => (&crate::vga_buffer::_error(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! error {
+    ($($arg:tt)*) => (&crate::errorln!("{}\n", format_args!($($arg)*)));
+}
+
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    WRITER.lock().write_fmt(args).unwrap();
+}
+
+pub fn _error(args: fmt::Arguments) {
+    use core::fmt::Write;
+    WRITER
+        .lock()
+        .change_color(Color::Red, Color::Black)
+        .unwrap();
+    WRITER.lock().write_fmt(args).unwrap();
+    WRITER
+        .lock()
+        .change_color(Color::Yellow, Color::Black)
+        .unwrap();
+}
+
+pub fn change_color(color: Color, back: Color) {
+    WRITER.lock().change_color(color, back).unwrap();
+}
+
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+lazy_static! {
+    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+        column_position: 0,
+        color_code: ColorCode::new(Color::Yellow, Color::Black),
+        buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+    });
+}

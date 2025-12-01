@@ -1,5 +1,5 @@
 [package]
-name = "blog_os"
+name = "void_os"
 version = "0.1.0"
 edition = "2024"
 
@@ -13,9 +13,13 @@ test-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "st
 test-success-exit-code = 33
 
 [[bin]]
-name = "blog_os"
+name = "void_os"
 test = true
 bench = false
+
+[[test]]
+name = "should_panic"
+harness = false
 
 [dependencies]
 bootloader = "0.9"
